@@ -6,77 +6,45 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 
-# installed from 
-# pip install git+https://github.com/drj11/pdftables.git --user
-# pip install git+https://github.com/rth/pdftables --user
-# pip install git+https://github.com/euske/pdfminer.git --user
+import os.path
 
-from pdfminer.pdfdocument import PDFDocument
-from pdfminer.pdfparser import PDFParser
-from pdfminer.pdfpage import PDFPage
-from pdfminer.pdfpage import PDFTextExtractionNotAllowed
-from pdfminer.pdfinterp import PDFResourceManager
-from pdfminer.pdfinterp import PDFPageInterpreter
-from pdfminer.pdfdevice import PDFDevice
-
-from pdfminer.layout import LAParams
-from pdfminer.converter import PDFPageAggregator
-
-
-
-from pdftables.pdftables import page_to_tables
-from pdftables.display import to_string
-
-import pandas as pd
-
-import re
-import numpy as np
 from .parsers import LCLMonthlyAccountStatement
+from subprocess import Popen, PIPE
+
+# http://blog.alivate.com.au/poppler-windows/
+
+DEFAULT_PDFTOTEXT = '/usr/bin/pdftotext'
+
+def bank_statement( path, bank_name, debug=False, work_dir='/tmp/', pdftotext=DEFAULT_PDFTOTEXT,
+        hide_matched=False):
+
+    basedir, basename = os.path.split(path)
+    basename, _ = os.path.splitext(basename)
+
+    txt_path = os.path.join(work_dir, basename + '.txt')
 
 
-def bank_statement( path, bank_name, debug=False, caching=True):
+    p = Popen([pdftotext, '-layout', path, txt_path], stderr=PIPE)
 
-    fh = open(path, 'rb')
+    p.wait()
 
-    parser = PDFParser(fh)
-
-    doc = PDFDocument(parser, caching=caching)
-
-    # Check if the document allows text extraction. If not, abort.
-    if not doc.is_extractable:
-        raise PDFTextExtractionNotAllowed
-    # Create a PDF resource manager object that stores shared resources.
-    rsrcmgr = PDFResourceManager()
-    # Create a PDF device object.
-    device = PDFDevice(rsrcmgr)
-    # Create a PDF interpreter object.
-    interpreter = PDFPageInterpreter(rsrcmgr, device)
-
-    # Set parameters for analysis.
-    laparams = LAParams()
-    laparams.word_margin = 0.0
-    # Create a PDF page aggregator object.
-    device = PDFPageAggregator(rsrcmgr, laparams=laparams)
-    interpreter = PDFPageInterpreter(rsrcmgr, device)
-
-    # finally perform the 
+    # get the right parser
     if bank_name == 'LCL-fr':
         st = LCLMonthlyAccountStatement()
     else:
         raise NotImplementedError
-    for idx, page in enumerate(PDFPage.create_pages(doc)):
-        interpreter.process_page(page)
-        # receive the LTPage object for the page.
-        layout = device.get_result()
-        
-        table_data, table_obj = page_to_tables(layout)
 
-   #     #print('='*20, idx)
-   #     st.process_page(table_data, debug=debug)
-   #     #  #print(to_string(table.data))
-   # st.finalize()
+    with open(txt_path, 'rt') as fh:
+        txt = fh.readlines()
+        for line in txt:
+            st.detect_credit_debit_positions(line)
+        for line in txt:
+             st.process_line(line, debug=debug, hide_matched=hide_matched)
 
-    fh.close()
 
+        st.finalize()
+
+
+    os.remove(txt_path)
 
     return st

@@ -13,11 +13,46 @@ import numpy as np
 
 
 
-def _clean_num(x):
+def _str2num(x):
     return float(x.replace(',','.').replace(' ', ''))
 
-nregxp = "(\d*\s?\d+,\d\d)"
-descr_regexp = '.+'
+def _num2str(x):
+    return '{:,}'.format(x).replace(',', ' ')
+
+N_REGEXP = "(?P<amount>\d*\s?\d+,\d\d)"
+N_REGEXP2 = "(?P<amount2>\d*\s?\d+,\d\d)" # same think with a different key
+DATE_SHORT_REGEXP = "(?P<dateshort>\d\d\.\d\d)"
+DATE_LONG_REGEXP = "(?P<datelong>\d\d\.\d\d.\d\d)"
+DESCR_REGEXP = '(?P<descr>.+)'
+COMMENT_REGEXP = '(?P<descr>.{1,40})'
+
+BEGIN_STATEMENT_REGEXP = "^\s*DATE\s+LIBELLE\s+VALEUR\s+DEBIT\s+CREDIT"
+
+
+INIT_STATEMENT_REGEXP = "^\s*" + DATE_SHORT_REGEXP + "\s+ANCIEN SOLDE\s+" + N_REGEXP
+FINAL_STATEMENT_REGEXP = "^\s*" + DATE_SHORT_REGEXP + "\s+SOLDE EN EUROS\s+" + N_REGEXP
+TOTAL_STATEMENT_REGEXP = "^\s*TOTAUX\s+" + N_REGEXP + '\s+' + N_REGEXP2
+REGULAR_STATEMENT_REGEXP = "^\s*" + DATE_SHORT_REGEXP + '\s+' + DESCR_REGEXP + '\s+'\
+                             + DATE_LONG_REGEXP + '\s+' + N_REGEXP
+REGULAR_STATEMENT_COMMENT_REGEXP = '\s{5,10}\s*' + COMMENT_REGEXP
+
+IGNORE_LINES = ['^.*dit Lyonnais-SA au capital.*', '^\s*RELEVE DE COMPTE\s*', '^\s+Page \d+ / \d+\s+',
+        '^\s+$', BEGIN_STATEMENT_REGEXP, '^\s*Indicatif.*Compte.*',
+        '^[A-Z\s]+$', # name of the account holder
+        '^\s+du\s*\d\d.\d\d.\d\d\d\d\s*au\s*' '.*', # e.g. du 02.10.2015 au 30.10.2015 - N° 82
+        '^\s+SOIT EN FRANCS.*',
+        TOTAL_STATEMENT_REGEXP, # this already parsed when first reading the file
+        ]
+
+
+def _estimate_sign_pos(pos, credit_column_pos, debit_column_pos, **args):
+
+    d_center = 0.5*(credit_column_pos - debit_column_pos)
+    if pos > credit_column_pos - d_center:
+        return +1
+    else:
+        return -1
+
 
 
 def optimize_binary(values, sum_p, sum_n):
@@ -45,25 +80,144 @@ def optimize_binary(values, sum_p, sum_n):
 class LCLMonthlyAccountStatement():
 
     def __init__(self):
-        self.initial_statement = None
-        self.final_statement = None
-        self.total_debit = None
-        self.total_credit = None
+        self.pars = {key: None for key in ['initial_statement', 'final_statement',
+                                            'total_debit', 'total_credit',
+                                            'credit_column_pos', 'debit_column_pos']}
         self.data_raw = []   # contains tuples (date, name, description, debit, credit)
         self.processing_phase = 'head'
 
     def finalize(self):
         res = pd.DataFrame(self.data_raw)
-        res.index = res.date_init
-        del res['date_init']
+        res.index = res.dateshort
+        del res['dateshort']
         self.data = res
-        self.calculate_missing_signs()
+        self.data['balance'] = self.data['amount'].cumsum() + self.pars['initial_statement']
 
-        #print(self.initial_statement)
-        self.data['amount_signed'] = self.data['amount']*self.data['sign']
-        self.data['balance'] = self.data['amount_signed'].cumsum() + self.initial_statement
-        
-        self.final_statement = self.data.balance.values[-1]
+        if not self._check_validity():
+            raise ValueError('Error: failed consistently parsing the BankStatement!')
+
+        #self.calculate_missing_signs()
+
+
+        #self.final_statement = self.data.balance.values[-1]
+
+
+    def detect_credit_debit_positions(self, line):
+        """ Parsing the document the first time to get the position of the 
+        debit and credit columns
+        """
+        if self.pars['total_debit'] is not None:
+            return
+            
+        gr = lambda x: res.group(x)
+        res = re.match(TOTAL_STATEMENT_REGEXP, line)
+        if res:
+            self.pars['total_debit'] = _str2num(gr('amount'))
+            self.pars['total_credit'] = _str2num(gr('amount2'))
+            self.pars['debit_column_pos'] = res.end('amount')
+            self.pars['credit_column_pos'] = res.end('amount2')
+
+
+    def _check_validity(self):
+        is_valid = True
+
+        final_statement_2 = self.pars['total_credit'] - self.pars['total_debit'] 
+        err = self.pars['final_statement'] - final_statement_2
+        if not np.abs(err) <= 0.01:
+            print('Check failed: total_credit - total_debit - final_statement != 0')
+            print('             {:.2f}  - {:.2f} - {:.2f} != 0'.format(
+                        self.pars['total_credit'],
+                        self.pars['total_debit'], self.pars['final_statement']))
+            print('               err = {:.2f} euros'.format(err))
+            is_valid = False
+
+        amounts = self.data.amount
+
+        total_debit = - self.pars['total_debit']
+        if self.pars['initial_statement'] < 0:
+            total_debit += - self.pars['initial_statement']
+        isum = amounts[amounts<0].sum()
+        err = isum - total_debit
+        if not np.abs(err) <= 0.01:
+            print('Check failed: Sigma debit_i  - total_debit != 0')
+            print('              {:.2f} - {:.2f} != 0'.format(isum, total_debit))
+            print('               err = {:.2f} euros'.format(err))
+            is_valid = False
+
+
+
+        total_credit = self.pars['total_credit']
+        if self.pars['initial_statement'] > 0:
+            total_credit += - self.pars['initial_statement']
+        isum = amounts[amounts>0].sum()
+        err = total_credit - isum
+        if not np.abs(err) <= 0.01:
+            print('Check failed: Sigma credit_i - total_credit != 0')
+            print('              {:.2f} - {:.2f} != 0'.format(isum, total_credit))
+            print('               err = {:.2f} euros'.format(err))
+            is_valid = False
+
+
+
+        return is_valid
+
+
+    def process_line(self, line, debug=False, hide_matched=True):
+        """ Parsing the file a second time """
+        if self.processing_phase == 'head' and re.match(BEGIN_STATEMENT_REGEXP, line):
+            self.processing_phase = 'body'
+            return
+
+
+        if self.processing_phase in ['head', 'tail']:
+            return
+
+        ignore_line = False
+        for regexp in IGNORE_LINES:
+            if re.match(regexp, line):
+                ignore_line = True
+
+
+        if not ignore_line:
+            if debug and not hide_matched:
+                print(line.replace('\n',''))
+
+            for pattern_name, regexp in [
+                    ('initial_statement', INIT_STATEMENT_REGEXP),
+                    ('final_statement',  FINAL_STATEMENT_REGEXP),
+                    ('regular_line',  REGULAR_STATEMENT_REGEXP),
+                    ('regular_line_comment', REGULAR_STATEMENT_COMMENT_REGEXP)
+                    ]:
+                res = re.match(regexp, line)
+                if res:
+                    gr = lambda x: res.group(x)
+                    if pattern_name in ['initial_statement', 'final_statement']:
+                        amount = _str2num(gr('amount'))
+                        sign = _estimate_sign_pos(res.end('amount'), **self.pars)
+                        self.pars[pattern_name] = amount*sign
+                    elif pattern_name == 'regular_line':
+                        out = {key: gr(key) for key in ['amount', 'dateshort', 'datelong', 'descr']}
+
+                        amount = _str2num(out['amount']) 
+                        sign = _estimate_sign_pos(res.end('amount'), **self.pars)
+                        out['amount'] =  amount*sign
+                        out['descr'] = out['descr'].strip()
+                        out['comment'] = []
+
+                        self.data_raw.append(out)
+                    elif pattern_name == 'regular_line_comment' and self.data_raw:
+                        prev_el = self.data_raw[-1]
+                        prev_el['comment'].append(gr('descr').strip())
+                    if debug and not hide_matched:
+                        print('        => matched <= ')
+                    break
+            else:
+                if debug and hide_matched:
+                    print(line.replace('\n',''))
+
+
+        if self.processing_phase == 'body' and re.match(FINAL_STATEMENT_REGEXP, line):
+            self.processing_phase = 'tail'
 
     def calculate_missing_signs(self):
         signs = self.data.sign.values
@@ -92,66 +246,6 @@ class LCLMonthlyAccountStatement():
 
 
 
-
-
-
-    def process_page(self, table, debug=False):
-        for row_orig in table:
-            row = ''.join(row_orig)
-            if self.processing_phase == 'head' and 'ANCIEN SOLDE' in row:
-                self.processing_phase = 'body'
-            if 'LCL vous informe sur' in row:
-                self.processing_phase = 'tail'
-
-            if self.processing_phase in ['head', 'tail']:
-                continue
-
-
-            if debug:
-                print(row_orig)
-            for pattern_name, regexp in [
-                    ('initial_statement', '^\s*ANCIEN SOLDE\s+' + nregxp),
-                    ('total_debit_credit', '^\s*TOTAUX\s+'+ nregxp +'\s+' + nregxp),
-                    ('regular_line', '^(\d\d\.\d\d)\s*('+ descr_regexp +')\s*(\d\d\.\d\d.\d\d)\s+'+nregxp+'.*'),
-                    ('regular_line_fail', '^(\d\d\.\d\d)\s*('+ descr_regexp +')\s+'+nregxp+'.*')
-                    ]:
-                res = re.match(regexp, row)
-                if res:
-                    gr = res.groups()
-                    if pattern_name == 'initial_statement':
-                        self.initial_statement = _clean_num(gr[0])
-                    elif pattern_name == 'total_debit_credit':
-                        self.total_debit = _clean_num(gr[0])
-                        self.total_credit = _clean_num(gr[1])
-                    elif pattern_name in ['regular_line', 'regular_line_fail']:
-                        if "LCL vous informe sur" in row:
-                            break
-                        if pattern_name == 'regular_line':
-                            out = {'date_init': gr[0], 'description': gr[1][:50],
-                                        'date': gr[2], 'amount': _clean_num(gr[3])}
-                        else:
-                            out = {'date_init': gr[0], 'description': gr[1][:50],
-                                        'date': np.nan, 'amount': _clean_num(gr[2])}
-
-                        out['sign'] = np.nan
-                        if len(row_orig) >= 3:
-                            if re.match("^\s+"+ nregxp +'\s*', row_orig[-1])  and not row_orig[-2]:
-                                out['sign'] = +1
-                            elif re.match("^\s+"+ nregxp +'\s*', row_orig[-2])  and not row_orig[-1]:
-                                out['sign'] = -1
-
-
-                        self.data_raw.append(out)
-                        if debug:
-                            print('         matched')
-                    break
-
-
     def __repr__(self):
-
-        mdict = {key: getattr(self, key) for key in ['initial_statement', 
-                                        'total_debit', 'total_credit'] \
-                        if getattr(self, key) is not None}
-
-        return str(mdict)
+        return str(self.pars)
 
