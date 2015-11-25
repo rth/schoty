@@ -21,7 +21,8 @@ def _num2str(x):
 
 N_REGEXP = "(?P<amount>\d*\s?\d+,\d\d)"
 N_REGEXP2 = "(?P<amount2>\d*\s?\d+,\d\d)" # same think with a different key
-DATE_SHORT_REGEXP = "(?P<dateshort>\d\d\.\d\d)"
+DATE_SHORT_REGEXP = "(?P<dateshort>\d\d.\d\d)"
+DATE_SHORT_GEN_REGEXP  = "(?P<dateshort>\d\d[\./]\d\d)"
 DATE_LONG_REGEXP = "(?P<datelong>\d\d\.\d\d.\d\d)"
 DESCR_REGEXP = '(?P<descr>.+)'
 COMMENT_REGEXP = '(?P<descr>.{1,40})'
@@ -29,11 +30,11 @@ COMMENT_REGEXP = '(?P<descr>.{1,40})'
 BEGIN_STATEMENT_REGEXP = "^\s*DATE\s+LIBELLE\s+VALEUR\s+DEBIT\s+CREDIT"
 
 
-INIT_STATEMENT_REGEXP = "^\s*" + DATE_SHORT_REGEXP + "\s+ANCIEN SOLDE\s+" + N_REGEXP
-FINAL_STATEMENT_REGEXP = "^\s*" + DATE_SHORT_REGEXP + "\s+SOLDE EN EUROS\s+" + N_REGEXP
+INIT_STATEMENT_REGEXP = "^\s*" + DATE_SHORT_GEN_REGEXP + "?\s+ANCIEN SOLDE\s+" + N_REGEXP
+FINAL_STATEMENT_REGEXP = "^\s*" + DATE_SHORT_GEN_REGEXP + "?\s+SOLDE EN EUROS\s+" + N_REGEXP
 TOTAL_STATEMENT_REGEXP = "^\s*TOTAUX\s+" + N_REGEXP + '\s+' + N_REGEXP2
 REGULAR_STATEMENT_REGEXP = "^\s*" + DATE_SHORT_REGEXP + '\s+' + DESCR_REGEXP + '\s+'\
-                             + DATE_LONG_REGEXP + '\s+' + N_REGEXP
+                             + DATE_LONG_REGEXP + '[\s.]+' + N_REGEXP
 REGULAR_STATEMENT_COMMENT_REGEXP = '\s{5,10}\s*' + COMMENT_REGEXP
 
 IGNORE_LINES = ['^.*dit Lyonnais-SA au capital.*', '^\s*RELEVE DE COMPTE\s*', '^\s+Page \d+ / \d+\s+',
@@ -42,6 +43,10 @@ IGNORE_LINES = ['^.*dit Lyonnais-SA au capital.*', '^\s*RELEVE DE COMPTE\s*', '^
         '^\s+du\s*\d\d.\d\d.\d\d\d\d\s*au\s*' '.*', # e.g. du 02.10.2015 au 30.10.2015 - N° 82
         '^\s+SOIT EN FRANCS.*',
         TOTAL_STATEMENT_REGEXP, # this already parsed when first reading the file
+        # LCL Account statements 2009 to 2011-07
+        '^\s+SOUS TOTAL :\s+' + N_REGEXP,
+        '^\s+CARTE N° [A-Z0-9]+\s+',
+        '^\s+SOLDE INTERMEDIAIRE A FIN\s+',
         ]
 
 
