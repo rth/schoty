@@ -5,7 +5,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-from bankstatement import bank_statement
+from schoty import bank_statement
 
 import pandas as pd
 
@@ -24,7 +24,7 @@ matplotlib.style.use('ggplot')
 filepath = glob('../datasets/LCL_roman/2011/*20110601*.pdf')[0]
 
 print(os.path.abspath(filepath))
-st = bank_statement(filepath, 'LCL-fr', debug=True, hide_matched=False)
+st = bank_statement(filepath, 'LCL', lang='fr', debug=True, hide_matched=False)
 
 print(st)
 #st.data['balance'].plot()

@@ -8,4 +8,6 @@ from __future__ import unicode_literals
 
 from ._version import __version__
 
-from .base import bank_statement
+from .base import bank_statement, BankStatementSerie
+
+from .process import process_statement

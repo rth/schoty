@@ -6,33 +6,31 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import sys
-from bankstatement import bank_statement
-from glob import glob
+from schoty import BankStatementSerie
 
-  #filepath = 'data/COMPTEDEDEPOTS_00744058275_20151030.pdf'
-  #filepath = 'data/COMPTEDEDEPOTS_00744058275_20131231.pdf'
-  
-  #st = bank_statement(filepath, 'LCL-fr')
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.style.use('ggplot')
 
-dataset_list = sorted(glob('../datasets/LCL_roman/*/*pdf'))
+#filepath = 'data/COMPTEDEDEPOTS_00744058275_20151030.pdf'
+#filepath = 'data/COMPTEDEDEPOTS_00744058275_20131231.pdf'
 
-N_tot = len(dataset_list)
-N_valid = 0
+#st = bank_statement(filepath, 'LCL-fr')
 
-print('Processing dataset:')
-for path in dataset_list:
-    short_path = '-'.join((path[-12:-8],path[-8:-6],path[-6:-4]))
-    print(  ' - ', short_path, end='')
-    sys.stdout.flush()
-    try: 
-        st = bank_statement(path, 'LCL-fr')
-        N_valid += 1
-        print(' ->  [ok]')
-    except:
-        print(' ->  [failed]')
+dataset_list = '../datasets/LCL_roman/*/*pdf'
 
-print('     successfully parsed {}/{} files.'.format(N_valid, N_tot))
-        
-    
 
+res = BankStatementSerie(dataset_list, 'LCL', lang='fr', verbose=False)
+
+
+#print(res.data)
+
+#res.data.balance.plot(
+#        xlim=( pd.Timestamp('2014-01-01'), pd.Timestamp('2015-01-01')),
+#        ylim=(-1000, 3000))
+#
+#plt.show()
+
+res.data.to_pickle('LCL_roman.pkl')
 

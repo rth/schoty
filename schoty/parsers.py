@@ -84,16 +84,19 @@ def optimize_binary(values, sum_p, sum_n):
 
 class LCLMonthlyAccountStatement():
 
-    def __init__(self):
+    def __init__(self, lang='fr'):
         self.pars = {key: None for key in ['initial_statement', 'final_statement',
                                             'total_debit', 'total_credit',
                                             'credit_column_pos', 'debit_column_pos']}
         self.data_raw = []   # contains tuples (date, name, description, debit, credit)
         self.processing_phase = 'head'
+        if lang != 'fr':
+            raise NotImplementedError
 
     def finalize(self):
         res = pd.DataFrame(self.data_raw)
-        res.index = res.dateshort
+        res.index = pd.to_datetime(res.apply(lambda row: '.'.join([row['dateshort'],row['datelong'][-2:]]), axis=1))
+        res['datelong'] = pd.to_datetime(res.datelong)
         del res['dateshort']
         self.data = res
         self.data['balance'] = self.data['amount'].cumsum() + self.pars['initial_statement']
@@ -166,6 +169,32 @@ class LCLMonthlyAccountStatement():
 
         return is_valid
 
+    @property
+    def start_date(self):
+        return self._get_start_end_date(idx=0)
+
+    @property
+    def end_date(self):
+        return self._get_start_end_date(idx=-1)
+
+
+    def _get_start_end_date(self, idx=0):
+        dates_short = self.data.dateshort.values
+
+        if idx == 0:
+            par_key = 'start_date'
+        elif idx == -1:
+            par_key = 'end_date'
+        else:
+            raise ValueError
+
+        if par_key in self.pars:
+            dd_mm = self.pars[par_key]
+        else:
+            dd_mm = dates_short[idx]
+
+        return dd_mm
+
 
     def process_line(self, line, debug=False, hide_matched=True):
         """ Parsing the file a second time """
@@ -200,6 +229,12 @@ class LCLMonthlyAccountStatement():
                         amount = _str2num(gr('amount'))
                         sign = _estimate_sign_pos(res.end('amount'), **self.pars)
                         self.pars[pattern_name] = amount*sign
+                        if 'descr' in res.groupdict():
+                            if pattern_name == 'initial_statement':
+                                self.pars['start_date'] = gr('descr').replace('/', '.')
+                            else:
+                                self.pars['end_date'] = gr('descr').replace('/', '.')
+
                     elif pattern_name == 'regular_line':
                         out = {key: gr(key) for key in ['amount', 'dateshort', 'datelong', 'descr']}
 
@@ -223,6 +258,7 @@ class LCLMonthlyAccountStatement():
 
         if self.processing_phase == 'body' and re.match(FINAL_STATEMENT_REGEXP, line):
             self.processing_phase = 'tail'
+
 
     def calculate_missing_signs(self):
         signs = self.data.sign.values
@@ -248,7 +284,6 @@ class LCLMonthlyAccountStatement():
             print('Failed to build the balance sheet: {} euro off'.format(err))
 
         self.data['sign'] = signs
-
 
 
     def __repr__(self):
