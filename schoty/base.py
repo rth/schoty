@@ -56,10 +56,20 @@ class BankStatementSerie(object):
 
 
 
+def open_pdf_statement(path, pdftotext=DEFAULT_PDFTOTEXT):
+
+
+    p = Popen([pdftotext, '-layout', path, '-'], stderr=PIPE, stdout=PIPE)
+
+    stdout, sterr = p.communicate()
+
+    stdout = stdout.decode("utf-8") 
+
+    return stdout
 
 
 
-def open_pdf_statement(path, bank_name, lang='fr', debug=False, pdftotext=DEFAULT_PDFTOTEXT,
+def process_pdf_statement(path, bank_name, lang='fr', debug=False, pdftotext=DEFAULT_PDFTOTEXT,
         hide_matched=False):
 
 
