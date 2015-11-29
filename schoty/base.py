@@ -59,18 +59,20 @@ class BankStatementSerie(object):
 
 
 
-def bank_statement(path, bank_name, lang='fr', debug=False, work_dir='/tmp/', pdftotext=DEFAULT_PDFTOTEXT,
+def open_pdf_statement(path, bank_name, lang='fr', debug=False, pdftotext=DEFAULT_PDFTOTEXT,
         hide_matched=False):
 
-    basedir, basename = os.path.split(path)
-    basename, _ = os.path.splitext(basename)
 
-    txt_path = os.path.join(work_dir, basename + '.txt')
+    p = Popen([pdftotext, '-layout', path, '-'], stderr=PIPE, stdout=PIPE)
 
+    stdout, sterr = p.communicate()
 
-    p = Popen([pdftotext, '-layout', path, txt_path], stderr=PIPE)
+    stdout = stdout.decode("utf-8") 
 
-    p.wait()
+    print(type(stdout))
+
+    txt = stdout.splitlines()
+
 
     # get the right parser
     if bank_name == 'LCL':
@@ -78,17 +80,12 @@ def bank_statement(path, bank_name, lang='fr', debug=False, work_dir='/tmp/', pd
     else:
         raise NotImplementedError
 
-    with open(txt_path, 'rt') as fh:
-        txt = fh.readlines()
-        for line in txt:
-            st.detect_credit_debit_positions(line)
-        for line in txt:
-             st.process_line(line, debug=debug, hide_matched=hide_matched)
+    for line in txt:
+        st.detect_credit_debit_positions(line)
+    for line in txt:
+         st.process_line(line, debug=debug, hide_matched=hide_matched)
 
 
-        st.finalize()
-
-
-    os.remove(txt_path)
+    st.finalize()
 
     return st

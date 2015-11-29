@@ -18,7 +18,7 @@ matplotlib.style.use('ggplot')
 
 #st = bank_statement(filepath, 'LCL-fr')
 
-dataset_list = '../datasets/LCL_roman/*/*pdf'
+dataset_list = '/home/rth/projects/schoty/datasets/LCL_roman/*/*pdf'
 
 
 res = BankStatementSerie(dataset_list, 'LCL', lang='fr', verbose=False)
