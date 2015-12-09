@@ -7,8 +7,6 @@ from __future__ import unicode_literals
 
 import re
 
-from six import iteritems
-
 def indentify_pdf_statement(txt, bank=None, lang=None):
     """ Take in a string given by pdftotext and return 
       the bank_name and the lang it can correspond to """
@@ -24,5 +22,5 @@ def indentify_pdf_statement(txt, bank=None, lang=None):
             backend_flag.append(row_flag)
 
         if all(backend_flag):
-            res.append(regexp_row)
+            res.append({'bank': regexp_row['bank'], 'lang': regexp_row['lang']})
     return res

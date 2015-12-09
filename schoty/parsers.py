@@ -19,36 +19,6 @@ def _str2num(x):
 def _num2str(x):
     return '{:,}'.format(x).replace(',', ' ')
 
-N_REGEXP = "(?P<amount>\d*\s?\d+,\d\d)"
-N_REGEXP2 = "(?P<amount2>\d*\s?\d+,\d\d)" # same think with a different key
-DATE_SHORT_REGEXP = "(?P<dateshort>\d\d.\d\d)"
-DATE_SHORT_GEN_REGEXP  = "(?P<dateshort>\d\d[\./]\d\d)"
-DATE_LONG_REGEXP = "(?P<datelong>\d\d\.\d\d.\d\d)"
-DESCR_REGEXP = '(?P<descr>.+)'
-COMMENT_REGEXP = '(?P<descr>.{1,40})'
-
-BEGIN_STATEMENT_REGEXP = "^\s*DATE\s+LIBELLE\s+VALEUR\s+DEBIT\s+CREDIT"
-
-
-INIT_STATEMENT_REGEXP = "^\s*" + DATE_SHORT_GEN_REGEXP + "?\s+ANCIEN SOLDE\s+" + N_REGEXP
-FINAL_STATEMENT_REGEXP = "^\s*" + DATE_SHORT_GEN_REGEXP + "?\s+SOLDE EN EUROS\s+" + N_REGEXP
-TOTAL_STATEMENT_REGEXP = "^\s*TOTAUX\s+" + N_REGEXP + '\s+' + N_REGEXP2
-REGULAR_STATEMENT_REGEXP = "^\s*" + DATE_SHORT_REGEXP + '\s+' + DESCR_REGEXP + '\s+'\
-                             + DATE_LONG_REGEXP + '[\s.]+' + N_REGEXP
-REGULAR_STATEMENT_COMMENT_REGEXP = '\s{5,10}\s*' + COMMENT_REGEXP
-
-IGNORE_LINES = ['^.*dit Lyonnais-SA au capital.*', '^\s*RELEVE DE COMPTE\s*', '^\s+Page \d+ / \d+\s+',
-        '^\s+$', BEGIN_STATEMENT_REGEXP, '^\s*Indicatif.*Compte.*',
-        '^[A-Z\s]+$', # name of the account holder
-        '^\s+du\s*\d\d.\d\d.\d\d\d\d\s*au\s*' '.*', # e.g. du 02.10.2015 au 30.10.2015 - N° 82
-        '^\s+SOIT EN FRANCS.*',
-        TOTAL_STATEMENT_REGEXP, # this already parsed when first reading the file
-        # LCL Account statements 2009 to 2011-07
-        '^\s+SOUS TOTAL :\s+' + N_REGEXP,
-        '^\s+CARTE N° [A-Z0-9]+\s+',
-        '^\s+SOLDE INTERMEDIAIRE A FIN\s+',
-        ]
-
 
 def _estimate_sign_pos(pos, credit_column_pos, debit_column_pos, **args):
 
@@ -82,16 +52,18 @@ def optimize_binary(values, sum_p, sum_n):
 
 
 
-class LCLMonthlyAccountStatement():
+class GenericMonthlyAccountStatement():
 
-    def __init__(self, lang='fr'):
+    def __init__(self, bank, lang):
+        from . import db
         self.pars = {key: None for key in ['initial_statement', 'final_statement',
                                             'total_debit', 'total_credit',
                                             'credit_column_pos', 'debit_column_pos']}
         self.data_raw = []   # contains tuples (date, name, description, debit, credit)
         self.processing_phase = 'head'
-        if lang != 'fr':
-            raise NotImplementedError
+
+        bid = db.get(bank, lang)
+        self.regexp = bid['regexp']
 
     def finalize(self):
         res = pd.DataFrame(self.data_raw)
@@ -114,11 +86,12 @@ class LCLMonthlyAccountStatement():
         """ Parsing the document the first time to get the position of the 
         debit and credit columns
         """
+        rg = self.regexp
         if self.pars['total_debit'] is not None:
             return
             
         gr = lambda x: res.group(x)
-        res = re.match(TOTAL_STATEMENT_REGEXP, line)
+        res = re.match(rg['TOTAL_STATEMENT'], line)
         if res:
             self.pars['total_debit'] = _str2num(gr('amount'))
             self.pars['total_credit'] = _str2num(gr('amount2'))
@@ -198,7 +171,10 @@ class LCLMonthlyAccountStatement():
 
     def process_line(self, line, debug=False, hide_matched=True):
         """ Parsing the file a second time """
-        if self.processing_phase == 'head' and re.match(BEGIN_STATEMENT_REGEXP, line):
+        rg = self.regexp
+
+
+        if self.processing_phase == 'head' and re.match(rg['BEGIN_STATEMENT'], line):
             self.processing_phase = 'body'
             return
 
@@ -207,7 +183,7 @@ class LCLMonthlyAccountStatement():
             return
 
         ignore_line = False
-        for regexp in IGNORE_LINES:
+        for regexp in rg['IGNORE_LINES']:
             if re.match(regexp, line):
                 ignore_line = True
 
@@ -217,11 +193,14 @@ class LCLMonthlyAccountStatement():
                 print(line.replace('\n',''))
 
             for pattern_name, regexp in [
-                    ('initial_statement', INIT_STATEMENT_REGEXP),
-                    ('final_statement',  FINAL_STATEMENT_REGEXP),
-                    ('regular_line',  REGULAR_STATEMENT_REGEXP),
-                    ('regular_line_comment', REGULAR_STATEMENT_COMMENT_REGEXP)
+                    ('initial_statement', rg['INIT_STATEMENT']),
+                    ('final_statement',  rg['FINAL_STATEMENT']),
+                    ('regular_line',  rg['REGULAR_STATEMENT']),
+                    ('regular_line_comment', rg['REGULAR_STATEMENT_COMMENT'])
                     ]:
+                if regexp is None:
+                    continue
+
                 res = re.match(regexp, line)
                 if res:
                     gr = lambda x: res.group(x)
@@ -256,7 +235,7 @@ class LCLMonthlyAccountStatement():
                     print(line.replace('\n',''))
 
 
-        if self.processing_phase == 'body' and re.match(FINAL_STATEMENT_REGEXP, line):
+        if self.processing_phase == 'body' and re.match(rg['FINAL_STATEMENT'], line):
             self.processing_phase = 'tail'
 
 

@@ -80,7 +80,7 @@ class RegexpDB(object):
         else:
             filt_func = lambda x: True
 
-        return filter(filt_func, self.data)
+        return list(filter(filt_func, self.data))
 
 
 

@@ -14,7 +14,7 @@ from subprocess import Popen, PIPE
 
 import pandas as pd
 
-from .parsers import LCLMonthlyAccountStatement
+from .parsers import GenericMonthlyAccountStatement
 from .indentify import indentify_pdf_statement 
 
 # http://blog.alivate.com.au/poppler-windows/
@@ -72,35 +72,23 @@ def open_pdf_statement(path, pdftotext=DEFAULT_PDFTOTEXT):
 
 def process_pdf_statement(path, bank_name=None, lang=None, debug=False, pdftotext=DEFAULT_PDFTOTEXT,
         hide_matched=False):
+    from . import db
 
 
     txt = open_pdf_statement(path, pdftotext=pdftotext)
 
-    bid = indentify_pdf_statement(txt, bank=bank_name, lang=lang)
+    b_pars = indentify_pdf_statement(txt, bank=bank_name, lang=lang)
 
-    if not bid:
-        if lang is None and bank_name is None:
-            print('Error: could not indetify bank statement!')
-
-        else:
-            print('Error: could not identify bank statement with the following parameters:\n'\
-                    '  bank={},  lang={}'.format(bank_name, lang))
-    elif len(bid) > 1:
-        print('Error: provided statement matches several bank statements {}'.format(str(bid)))
+    if len(b_pars) == 1:
+        b_pars = b_pars[0]
     else:
-        bid = bid[0]
-
-    return
-
+        raise ValueError
 
     txt = txt.splitlines()
 
 
     # get the right parser
-    if bank_name == 'LCL':
-        st = LCLMonthlyAccountStatement(lang=lang)
-    else:
-        raise NotImplementedError
+    st = GenericMonthlyAccountStatement(**b_pars)
 
     for line in txt:
         st.detect_credit_debit_positions(line)
