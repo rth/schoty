@@ -38,7 +38,7 @@ class BankStatementSerie(object):
                 print(  ' - ', short_path, end='')
                 sys.stdout.flush()
             try: 
-                st = bank_statement(path, bank_name, lang=lang, pdftotext=pdftotext)
+                st = process_pdf_statement(path, bank_name, lang=lang, pdftotext=pdftotext)
                 self.elements.append(st)
                 N_valid += 1
                 if verbose:
@@ -46,6 +46,10 @@ class BankStatementSerie(object):
             except:
                 if verbose:
                     print(' ->  [failed]')
+                raise
+
+        # sort by date
+        self.elements = sorted(self.elements, key=lambda x: 12*x.date[0] + x.date[1])
 
         if verbose:
             print('     successfully parsed {}/{} files.'.format(N_valid, N_tot))
@@ -72,7 +76,6 @@ def open_pdf_statement(path, pdftotext=DEFAULT_PDFTOTEXT):
 
 def process_pdf_statement(path, bank_name=None, lang=None, debug=False, pdftotext=DEFAULT_PDFTOTEXT,
         hide_matched=False):
-    from . import db
 
 
     txt = open_pdf_statement(path, pdftotext=pdftotext)

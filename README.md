@@ -10,7 +10,8 @@ A Python package to parse bank statements in the PDF format.
 
  - **France**: Le Crédit Lyonnais (LCL) [pdf]  
  
- [[More details ...](https://github.com/schoty/schoty/blob/master/SUPPORTED_FORMATS.md)]
+
+ [More details ...](https://github.com/schoty/schoty/blob/master/SUPPORTED_FORMATS.md)
 
 #### Related projects
 

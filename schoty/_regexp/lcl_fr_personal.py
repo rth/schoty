@@ -28,3 +28,5 @@ IGNORE_LINES = ['^.*dit Lyonnais-SA au capital.*', '^\s*RELEVE DE COMPTE\s*', '^
         '^\s+CARTE N° [A-Z0-9]+\s+',
         '^\s+SOLDE INTERMEDIAIRE A FIN\s+',
         ]
+
+DATE = '%d.%m.%y'

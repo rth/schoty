@@ -66,11 +66,13 @@ class GenericMonthlyAccountStatement():
         self.regexp = bid['regexp']
 
     def finalize(self):
+        rg = self.regexp
         res = pd.DataFrame(self.data_raw)
-        res.index = pd.to_datetime(res.apply(lambda row: '.'.join([row['dateshort'],row['datelong'][-2:]]), axis=1))
-        res['datelong'] = pd.to_datetime(res.datelong)
-        del res['dateshort']
-        self.data = res
+        res.index = pd.to_datetime(
+                res.apply(lambda row: '.'.join([row['dateshort'], row['datelong'][-2:]]), axis=1), 
+                        format=rg['DATE'])
+        res['datelong'] = pd.to_datetime(res.datelong, format=rg['DATE'])
+        self.data = res.sort(axis=0)
         self.data['balance'] = self.data['amount'].cumsum() + self.pars['initial_statement']
 
         if not self._check_validity():
@@ -151,8 +153,36 @@ class GenericMonthlyAccountStatement():
         return self._get_start_end_date(idx=-1)
 
 
+    @property
+    def date(self):
+        res = []
+        for idx, el in enumerate([self.start_date, self.end_date]):
+            year = el.year
+            month = el.month
+            day = el.day
+
+            if (day > 15, day < 15)[idx]:
+                month += [+1, -1][idx]
+
+            if month > 12:
+                month = 1
+                year += 1
+            elif month < 1:
+                month = 12
+                year -= 1
+            res.append((year, month))
+
+        if res[0] == res[1]:
+            res = res[0]
+        else:
+            res =  (year, int(np.median([el.month for el in self.data.index])))
+
+        return res
+
+
+
     def _get_start_end_date(self, idx=0):
-        dates_short = self.data.dateshort.values
+        dates_short = self.data.index.values
 
         if idx == 0:
             par_key = 'start_date'
@@ -166,7 +196,7 @@ class GenericMonthlyAccountStatement():
         else:
             dd_mm = dates_short[idx]
 
-        return dd_mm
+        return pd.Timestamp(dd_mm)
 
 
     def process_line(self, line, debug=False, hide_matched=True):
