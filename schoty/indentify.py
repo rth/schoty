@@ -9,21 +9,14 @@ import re
 
 from six import iteritems
 
-
 def indentify_pdf_statement(txt, bank=None, lang=None):
     """ Take in a string given by pdftotext and return 
       the bank_name and the lang it can correspond to """
 
-    from schoty import regexp
-
-
-    if bank is not None:
-        regexp = [ el for el in regexp if el['bank'] == bank]
-    if lang is not None:
-        regexp = [ el for el in regexp if el['lang'] == lang]
+    from . import db
 
     res = []
-    for regexp_row in regexp:
+    for regexp_row in db.search(bank, lang):
         IDENTIFY_REGEXP = regexp_row['regexp']['IDENTIFY']
         backend_flag = []
         for pattern_line in IDENTIFY_REGEXP:

@@ -16,3 +16,4 @@ A Python package to parse bank statements in the PDF format.
  - [`penrosestudio/barclays-bank-pdf-to-csv`](https://github.com/penrosestudio/barclays-bank-pdf-to-csv) (Barclays buisness)
  - [`mfonsen/parsestatements`](https://github.com/mfonsen/parsestatements) (Finnish Osuuspankki and S-Pankki statements)
  - [`wesabe/fixofx`](https://github.com/wesabe/fixofx)
+ - [`moneymanagerex/moneymanagerex`](https://github.com/moneymanagerex/moneymanagerex)
